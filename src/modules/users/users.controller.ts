@@ -56,10 +56,10 @@ export class UsersController {
       const filename = `${user.userId}-${crypto.randomBytes(8).toString('hex')}${path.extname(data.filename)}`;
       const filepath = path.join(uploadDir, filename);
 
-      await new Promise((resolve, reject) => {
+      await new Promise<void>((resolve, reject) => {
         const writeStream = fs.createWriteStream(filepath);
         data.file.pipe(writeStream);
-        writeStream.on('finish', resolve);
+        writeStream.on('finish', () => resolve());
         writeStream.on('error', reject);
       });
 

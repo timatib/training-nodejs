@@ -17,12 +17,12 @@ export class AuthController {
 
       const accessToken = await reply.jwtSign(
         { userId: user.id, email: user.email, role: user.role },
-        { expiresIn: process.env.JWT_EXPIRES_IN || '15m' }
+        { sign: { expiresIn: process.env.JWT_EXPIRES_IN || '15m' } }
       );
 
       const refreshToken = await reply.jwtSign(
         { userId: user.id, email: user.email, role: user.role },
-        { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d', sign: { key: process.env.JWT_REFRESH_SECRET } }
+        { sign: { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d', key: process.env.JWT_REFRESH_SECRET } }
       );
 
       await this.authService.saveRefreshToken(user.id, refreshToken);
@@ -52,12 +52,12 @@ export class AuthController {
 
       const accessToken = await reply.jwtSign(
         { userId: user.id, email: user.email, role: user.role },
-        { expiresIn: process.env.JWT_EXPIRES_IN || '15m' }
+        { sign: { expiresIn: process.env.JWT_EXPIRES_IN || '15m' } }
       );
 
       const refreshToken = await reply.jwtSign(
         { userId: user.id, email: user.email, role: user.role },
-        { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d', sign: { key: process.env.JWT_REFRESH_SECRET } }
+        { sign: { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d', key: process.env.JWT_REFRESH_SECRET } }
       );
 
       await this.authService.saveRefreshToken(user.id, refreshToken);
@@ -90,7 +90,7 @@ export class AuthController {
 
       const accessToken = await reply.jwtSign(
         { userId: stored.user.id, email: stored.user.email, role: stored.user.role },
-        { expiresIn: process.env.JWT_EXPIRES_IN || '15m' }
+        { sign: { expiresIn: process.env.JWT_EXPIRES_IN || '15m' } }
       );
 
       return reply.send({ accessToken });
