@@ -1,2 +1,2 @@
 # training-nodejs 
-вx
+вxg
