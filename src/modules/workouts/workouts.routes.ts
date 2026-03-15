@@ -12,4 +12,5 @@ export async function workoutsRoutes(fastify: FastifyInstance) {
   fastify.get('/:id', { preHandler: [authGuard] }, (req, reply) => controller.getWorkout(req, reply));
   fastify.patch('/:id', { preHandler: [authGuard] }, (req, reply) => controller.updateWorkout(req, reply));
   fastify.patch('/:id/complete', { preHandler: [authGuard] }, (req, reply) => controller.completeWorkout(req, reply));
+  fastify.delete('/:id', { preHandler: [authGuard] }, (req, reply) => controller.deleteWorkout(req, reply));
 }

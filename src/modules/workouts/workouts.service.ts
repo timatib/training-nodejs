@@ -46,6 +46,13 @@ export class WorkoutsService {
     });
   }
 
+  async deleteWorkout(userId: string, id: string) {
+    const workout = await this.prisma.workoutPlan.findFirst({ where: { id, userId } });
+    if (!workout) throw { statusCode: 404, message: 'Workout not found' };
+    await this.prisma.workoutPlan.delete({ where: { id } });
+    return { success: true };
+  }
+
   async completeWorkout(userId: string, id: string) {
     const workout = await this.prisma.workoutPlan.findFirst({ where: { id, userId } });
     if (!workout) throw { statusCode: 404, message: 'Workout not found' };

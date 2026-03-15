@@ -87,7 +87,7 @@ ${workoutContext}
 - INTERMEDIATE (средний): 3-4 подхода × 8-15 повторений, суперсеты разрешены
 - ADVANCED (продвинутый): 4-5 подходов, вариативность повторений, суперсеты, дроп-сеты
 - Включай 5-8 упражнений на тренировку
-- Если на указанную дату в расписании уже есть тренировка — уточни у пользователя
+- На одну дату можно создать несколько тренировок (разные группы мышц, утро/вечер)
 
 Формат блока (строго соблюдай):
 <SCHEDULE>[{"title":"Название тренировки","date":"YYYY-MM-DD","place":"GYM","exercises":[{"name":"Упражнение","sets":3,"reps":12}]}]</SCHEDULE>
@@ -96,7 +96,17 @@ ${workoutContext}
 - Поле place: "GYM" | "HOME" | "OUTDOOR"
 - Если план на несколько дней — включи все тренировки в один JSON-массив
 - Дата строго в формате YYYY-MM-DD
-- Упражнения с длительностью вместо повторений: используй поле "duration" (в минутах) вместо "reps"`;
+- Упражнения с длительностью вместо повторений: используй поле "duration" (в минутах) вместо "reps"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+УДАЛЕНИЕ ТРЕНИРОВОК:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Если пользователь просит удалить тренировку ("удали тренировку на ...", "убери занятие на ..."),
+добавь в конец ответа блок:
+<DELETE_WORKOUT>{"date":"YYYY-MM-DD"}</DELETE_WORKOUT>
+- Блок невидим пользователю — автоматически удаляет все тренировки на эту дату
+- Дата строго в формате YYYY-MM-DD (резолюция та же: "15 марта" → "${todayStr.slice(0, 4)}-03-15")
+- Если пользователь назвал конкретное название — добавь поле "title" для точного совпадения`;
 }
 
 // ─── SCHEDULE parser ──────────────────────────────────────────────────────────
@@ -107,6 +117,19 @@ function parseWorkoutSchedule(content: string): Array<{ title: string; date: str
   try {
     const parsed = JSON.parse(match[1].trim());
     return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+// ─── DELETE_WORKOUT parser ────────────────────────────────────────────────────
+
+function parseDeleteWorkout(content: string): Array<{ date: string; title?: string }> {
+  const match = content.match(/<DELETE_WORKOUT>([\s\S]*?)<\/DELETE_WORKOUT>/);
+  if (!match) return [];
+  try {
+    const parsed = JSON.parse(match[1].trim());
+    return Array.isArray(parsed) ? parsed : [parsed];
   } catch {
     return [];
   }
@@ -220,8 +243,25 @@ export class ChatService {
       }
     }
 
-    // Strip SCHEDULE block before saving message
-    const cleanContent = aiContent.replace(/<SCHEDULE>[\s\S]*?<\/SCHEDULE>/g, '').trim();
+    // Parse and delete workouts from AI response
+    const deleteItems = parseDeleteWorkout(aiContent);
+    for (const item of deleteItems) {
+      try {
+        const dateStart = new Date(item.date + 'T00:00:00');
+        const dateEnd = new Date(item.date + 'T23:59:59');
+        const where: any = { userId, date: { gte: dateStart, lte: dateEnd } };
+        if (item.title) where.title = { contains: item.title, mode: 'insensitive' };
+        await this.prisma.workoutPlan.deleteMany({ where });
+      } catch {
+        // ignore invalid entries
+      }
+    }
+
+    // Strip SCHEDULE and DELETE_WORKOUT blocks before saving message
+    const cleanContent = aiContent
+      .replace(/<SCHEDULE>[\s\S]*?<\/SCHEDULE>/g, '')
+      .replace(/<DELETE_WORKOUT>[\s\S]*?<\/DELETE_WORKOUT>/g, '')
+      .trim();
 
     const savedMessage = await this.prisma.message.create({
       data: { userId, role: 'ASSISTANT', content: cleanContent, type: 'TEXT' },

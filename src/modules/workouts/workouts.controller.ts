@@ -60,4 +60,15 @@ export class WorkoutsController {
       return reply.status(err.statusCode || 500).send({ error: err.message });
     }
   }
+
+  async deleteWorkout(request: FastifyRequest, reply: FastifyReply) {
+    const user = request.user as JwtPayload;
+    const { id } = request.params as { id: string };
+    try {
+      const result = await this.service.deleteWorkout(user.userId, id);
+      return reply.send(result);
+    } catch (err: any) {
+      return reply.status(err.statusCode || 500).send({ error: err.message });
+    }
+  }
 }
