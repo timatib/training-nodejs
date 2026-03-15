@@ -1,8 +1,8 @@
 import { PrismaClient } from '@prisma/client';
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { LogMealDto } from './nutrition.schema';
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export class NutritionService {
   constructor(private prisma: PrismaClient) {}
@@ -37,8 +37,8 @@ export class NutritionService {
     let aiAnalysis = '';
 
     try {
-      const response = await anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
         max_tokens: 300,
         messages: [
           {
@@ -51,7 +51,7 @@ export class NutritionService {
         ],
       });
 
-      const text = response.content[0].type === 'text' ? response.content[0].text : '';
+      const text = response.choices[0].message.content || '';
       const jsonMatch = text.match(/\{[^}]+\}/);
       if (jsonMatch) {
         const data = JSON.parse(jsonMatch[0]);

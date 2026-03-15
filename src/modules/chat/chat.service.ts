@@ -1,7 +1,7 @@
-import { PrismaClient, User, AiStyle, MessageRole } from '@prisma/client';
-import Anthropic from '@anthropic-ai/sdk';
+import { PrismaClient, User, AiStyle } from '@prisma/client';
+import OpenAI from 'openai';
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 function buildSystemPrompt(user: Partial<User>): string {
   const styleDescriptions: Record<AiStyle, string> = {
@@ -42,31 +42,10 @@ function buildSystemPrompt(user: Partial<User>): string {
 
 ${styleDescriptions[user.aiStyle || 'NORMAL']}
 
-Когда предлагаешь конкретное упражнение, ОБЯЗАТЕЛЬНО оборачивай его в JSON-блок:
-{"type":"workout_card","exercise":"Название упражнения","sets":3,"reps":12,"icon":"squat"}
-
-Возможные иконки: squat, pushup, run, bike, pull_up, plank, dumbbell, stretch, jump, swim
-
 Если профиль пользователя не заполнен, тактично попроси предоставить нужные данные.
-Всегда отвечай на языке пользователя (${user.language || 'ru'}).`;
-}
+Всегда отвечай на языке пользователя (${user.language || 'ru'}).
 
-function parseAIResponse(content: string): { text: string; workoutCards: any[] } {
-  const workoutCards: any[] = [];
-  const jsonRegex = /\{"type":"workout_card"[^}]+\}/g;
-  const matches = content.match(jsonRegex) || [];
-
-  for (const match of matches) {
-    try {
-      const card = JSON.parse(match);
-      workoutCards.push(card);
-    } catch {
-      // ignore invalid JSON
-    }
-  }
-
-  const cleanText = content.replace(jsonRegex, '').trim();
-  return { text: cleanText, workoutCards };
+Форматируй ответы в Markdown. Используй: **жирный**, списки (- или 1.), переносы строк. Не используй заголовки (# ## ###).`;
 }
 
 export class ChatService {
@@ -82,27 +61,18 @@ export class ChatService {
   }
 
   async sendMessage(userId: string, content: string) {
-    // Check subscription token limit
     const subscription = await this.prisma.subscription.findUnique({ where: { userId } });
     if (subscription && subscription.tokensUsed >= subscription.tokensLimit) {
       throw { statusCode: 403, message: 'Token limit exceeded. Please upgrade your subscription.' };
     }
 
-    // Get user profile for system prompt
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw { statusCode: 404, message: 'User not found' };
 
-    // Save user message
     await this.prisma.message.create({
-      data: {
-        userId,
-        role: 'USER',
-        content,
-        type: 'TEXT',
-      },
+      data: { userId, role: 'USER', content, type: 'TEXT' },
     });
 
-    // Get conversation history (last 20 messages)
     const history = await this.prisma.message.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
@@ -110,24 +80,23 @@ export class ChatService {
     });
     history.reverse();
 
-    // Build messages for Claude
-    const messages: Anthropic.MessageParam[] = history.map((m) => ({
-      role: m.role === 'USER' ? 'user' : 'assistant',
-      content: m.content,
-    }));
+    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+      { role: 'system', content: buildSystemPrompt(user) },
+      ...history.map((m) => ({
+        role: (m.role === 'USER' ? 'user' : 'assistant') as 'user' | 'assistant',
+        content: m.content,
+      })),
+    ];
 
-    // Call Claude API
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
       max_tokens: 1024,
-      system: buildSystemPrompt(user),
       messages,
     });
 
-    const aiContent = response.content[0].type === 'text' ? response.content[0].text : '';
-    const totalTokens = response.usage.input_tokens + response.usage.output_tokens;
+    const aiContent = response.choices[0].message.content || '';
+    const totalTokens = (response.usage?.prompt_tokens ?? 0) + (response.usage?.completion_tokens ?? 0);
 
-    // Update token usage
     if (subscription) {
       await this.prisma.subscription.update({
         where: { userId },
@@ -135,23 +104,9 @@ export class ChatService {
       });
     }
 
-    // Parse response for workout cards
-    const { text: cleanText, workoutCards } = parseAIResponse(aiContent);
-
-    // Save AI message
-    const messageType = workoutCards.length > 0 ? 'WORKOUT_CARD' : 'TEXT';
     const savedMessage = await this.prisma.message.create({
-      data: {
-        userId,
-        role: 'ASSISTANT',
-        content: cleanText,
-        type: messageType,
-        metadata: workoutCards.length > 0 ? { workoutCards } : undefined,
-      },
+      data: { userId, role: 'ASSISTANT', content: aiContent, type: 'TEXT' },
     });
-
-    // Check if we should create workout plans from the response
-    await this.tryCreateWorkoutPlans(userId, aiContent, user);
 
     return {
       message: savedMessage,
@@ -161,33 +116,6 @@ export class ChatService {
         ? 'You have used 80% of your token limit'
         : undefined,
     };
-  }
-
-  private async tryCreateWorkoutPlans(userId: string, content: string, user: any) {
-    // Look for workout schedule JSON blocks
-    const scheduleRegex = /\{"type":"workout_schedule"[^}]+\}/g;
-    const matches = content.match(scheduleRegex) || [];
-
-    for (const match of matches) {
-      try {
-        const schedule = JSON.parse(match);
-        if (schedule.workouts && Array.isArray(schedule.workouts)) {
-          for (const workout of schedule.workouts) {
-            await this.prisma.workoutPlan.create({
-              data: {
-                userId,
-                title: workout.title || 'Тренировка',
-                date: new Date(workout.date),
-                place: user.workoutPlace || 'HOME',
-                exercises: workout.exercises || [],
-              },
-            });
-          }
-        }
-      } catch {
-        // ignore
-      }
-    }
   }
 
   async clearHistory(userId: string) {

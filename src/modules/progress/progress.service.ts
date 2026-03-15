@@ -1,8 +1,8 @@
 import { PrismaClient } from '@prisma/client';
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { AddProgressDto } from './progress.schema';
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export class ProgressService {
   constructor(private prisma: PrismaClient) {}
@@ -23,8 +23,8 @@ export class ProgressService {
     let aiResponse = '';
 
     try {
-      const response = await anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
         max_tokens: 400,
         messages: [
           {
@@ -40,7 +40,7 @@ export class ProgressService {
         ],
       });
 
-      aiResponse = response.content[0].type === 'text' ? response.content[0].text : '';
+      aiResponse = response.choices[0].message.content || '';
     } catch (err) {
       aiResponse = 'Отличная работа! Продолжай в том же духе!';
     }
