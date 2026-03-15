@@ -31,6 +31,21 @@ export class ChatController {
     }
   }
 
+  async transcribeAudio(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      const data = await request.file();
+      if (!data) {
+        return reply.status(400).send({ error: 'No audio file provided' });
+      }
+      const buffer = await data.toBuffer();
+      const language = (request.query as any).language || 'ru';
+      const result = await this.chatService.transcribeAudio(buffer, data.mimetype, language);
+      return reply.send(result);
+    } catch (err: any) {
+      return reply.status(err.statusCode || 500).send({ error: err.message });
+    }
+  }
+
   async clearHistory(request: FastifyRequest, reply: FastifyReply) {
     const user = request.user as JwtPayload;
     const result = await this.chatService.clearHistory(user.userId);

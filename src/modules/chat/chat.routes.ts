@@ -9,5 +9,6 @@ export async function chatRoutes(fastify: FastifyInstance) {
 
   fastify.get('/messages', { preHandler: [authGuard] }, (req, reply) => controller.getMessages(req, reply));
   fastify.post('/message', { preHandler: [authGuard] }, (req, reply) => controller.sendMessage(req, reply));
+  fastify.post('/transcribe', { preHandler: [authGuard] }, (req, reply) => controller.transcribeAudio(req, reply));
   fastify.delete('/messages', { preHandler: [authGuard] }, (req, reply) => controller.clearHistory(req, reply));
 }
